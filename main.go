@@ -63,11 +63,12 @@ func imagestreamer(stream *Stream, device string) {
 			if err != nil {
 				panic(err)
 			}
-			for i := 0; ; i++ {
+			for {
 				fr, err := resp.ReadFrame()
 				if err != nil {
 					panic(err)
 				}
+
 				img, err := jpeg.Decode(fr)
 				if err != nil {
 					continue
