@@ -68,6 +68,7 @@ func imagestreamer(stream *Stream, device string) {
 				fr, err := resp.ReadFrame()
 				if err != nil {
 					log.Print(err)
+					log.Print("Reclaiming Frame Reader and continuing to get frames... ")
 					goto frame
 				}
 
