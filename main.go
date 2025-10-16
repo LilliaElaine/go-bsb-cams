@@ -59,6 +59,7 @@ func imagestreamer(stream *Stream, device string) {
 			}
 			frd := iface.Descriptors[i+1].(*descriptors.MJPEGFrameDescriptor)
 
+		frame:
 			resp, err := iface.ClaimFrameReader(fd.Index(), frd.Index())
 			if err != nil {
 				panic(err)
@@ -66,7 +67,8 @@ func imagestreamer(stream *Stream, device string) {
 			for {
 				fr, err := resp.ReadFrame()
 				if err != nil {
-					panic(err)
+					log.Print(err)
+					goto frame
 				}
 
 				img, err := jpeg.Decode(fr)
