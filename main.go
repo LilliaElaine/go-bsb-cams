@@ -37,7 +37,9 @@ func main() {
 }
 
 func imagestreamer(stream *Stream, device string) {
+frame:
 	fd, err := syscall.Open(device, syscall.O_RDWR, 0)
+	var deviceFd = fd
 	if err != nil {
 		panic(err)
 	}
@@ -59,9 +61,9 @@ func imagestreamer(stream *Stream, device string) {
 			}
 			frd := iface.Descriptors[i+1].(*descriptors.MJPEGFrameDescriptor)
 
-		frame:
 			resp, err := iface.ClaimFrameReader(fd.Index(), frd.Index())
 			if err != nil {
+				log.Print("Yes")
 				panic(err)
 			}
 			for {
@@ -69,6 +71,7 @@ func imagestreamer(stream *Stream, device string) {
 				if err != nil {
 					log.Print(err)
 					log.Print("Reclaiming Frame Reader and continuing to get frames... ")
+					syscall.Close(deviceFd)
 					goto frame
 				}
 
