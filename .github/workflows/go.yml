@@ -4,6 +4,7 @@
 name: build
 
 on:
+  create:
   workflow_dispatch:
     branches: ["main"]
   push:
