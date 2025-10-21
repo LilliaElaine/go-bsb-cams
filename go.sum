@@ -1,7 +1,11 @@
+github.com/LilliaElaine/mjpeg v0.0.0-20251021192541-2c29015ad34b h1:2XgthQFq/yXkCJUNNVz3CGE5p3wI+JOGXphJaOgyz8I=
+github.com/LilliaElaine/mjpeg v0.0.0-20251021192541-2c29015ad34b/go.mod h1:GAKUz9knlg+UB2oaCqgLTlWdsuVlf7ieJGt+oZzL4eY=
 github.com/google/gousb v1.1.3 h1:xt6M5TDsGSZ+rlomz5Si5Hmd/Fvbmo2YCJHN+yGaK4o=
 github.com/google/gousb v1.1.3/go.mod h1:GGWUkK0gAXDzxhwrzetW592aOmkkqSGcj5KLEgmCVUg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/hybridgroup/mjpeg v0.0.0-20250330094202-16d243df0e35 h1:bTJxSThEisMQhK+VQUaHK72RqcUr6hXzYtRnuJByiQo=
+github.com/hybridgroup/mjpeg v0.0.0-20250330094202-16d243df0e35/go.mod h1:GAKUz9knlg+UB2oaCqgLTlWdsuVlf7ieJGt+oZzL4eY=
 github.com/kevmo314/go-uvc v0.0.0-20250915020343-0eb292711e9f h1:4wmr7EOCjLjhSsdmMZz0gI+yko0Xs3liB6Dv6sroETM=
 github.com/kevmo314/go-uvc v0.0.0-20250915020343-0eb292711e9f/go.mod h1:tTMA/Kw0QEfReK+VotFviO3Gntk3ito14rh9m0W7Flg=
 github.com/labstack/echo v3.3.10+incompatible h1:pGRcYk231ExFAyoAjAfD85kQzRJCRI8bbnE7CX5OEgg=

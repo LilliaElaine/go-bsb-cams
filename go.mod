@@ -8,8 +8,11 @@ require (
 	github.com/labstack/echo v3.3.10+incompatible
 )
 
+replace github.com/hybridgroup/mjpeg v0.0.0-20250330094202-16d243df0e35 => github.com/LilliaElaine/mjpeg v0.0.0-20251021192541-2c29015ad34b
+
 require (
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/hybridgroup/mjpeg v0.0.0-20250330094202-16d243df0e35 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

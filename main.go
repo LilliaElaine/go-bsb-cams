@@ -2,14 +2,16 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"image/jpeg"
 	"log"
 	"net/http"
+	"strconv"
 	"syscall"
 
-	// "github.com/garymcbay/mjpeg"
 	"github.com/google/gousb"
+	"github.com/hybridgroup/mjpeg"
 	"github.com/kevmo314/go-uvc"
 	"github.com/kevmo314/go-uvc/pkg/descriptors"
 )
@@ -25,18 +27,24 @@ func getdevice() (device string) {
 	return fmt.Sprintf("/dev/bus/usb/%03v/%03v", dev.Desc.Bus, dev.Desc.Address)
 }
 
+var verbosePtr = flag.Bool("verbose", false, "Whether or not to show libusb errors")
+var port = flag.Int("port", 8080, "What Port To Output Frames To (Default is 8080)")
+
 func main() {
-	stream := NewStream()
+	flag.Parse()
+	stream := mjpeg.NewLiveStream()
 	device := getdevice()
 	// Pass your jpegBuffer frames using stream.UpdateJPEG(<your-buffer>)
 	go imagestreamer(stream, device)
 	mux := http.NewServeMux()
 	mux.Handle("/stream", stream)
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Print("Server Is Running And Can Be Accessed At: http://localhost:" + strconv.Itoa(*port) + "/stream")
+	log.Print("Make Sure You Have No Ending / When Inputting The Url Into Baballonia !!!")
+	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), mux))
 
 }
 
-func imagestreamer(stream *Stream, device string) {
+func imagestreamer(stream *mjpeg.Stream, device string) {
 frame:
 	fd, err := syscall.Open(device, syscall.O_RDWR, 0)
 	var deviceFd = fd
@@ -69,8 +77,10 @@ frame:
 			for {
 				fr, err := resp.ReadFrame()
 				if err != nil {
-					log.Print(err)
-					log.Print("Reclaiming Frame Reader and continuing to get frames... ")
+					if *verbosePtr {
+						log.Print(err)
+						log.Print("Reclaiming Frame Reader and continuing to get frames... ")
+					}
 					syscall.Close(deviceFd)
 					goto frame
 				}
