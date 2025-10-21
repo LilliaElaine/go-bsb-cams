@@ -5,13 +5,12 @@ name: build
 
 on:
   create:
-  workflow_dispatch:
-    branches: ["main"]
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-permissions: write-all
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
