@@ -4,6 +4,8 @@
 name: build
 
 on:
+  workflow_dispatch:
+    branches: ["main"]
   push:
     branches: ["main"]
   pull_request:
@@ -28,5 +30,6 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
         with:
           files: go-bsb-cams
