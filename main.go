@@ -94,7 +94,7 @@ func getdevice() (device string) {
 
 var gitVersion string
 var verbosePtr = flag.Bool("verbose", false, "Whether or not to show libusb errors")
-var port = flag.Int("port", 8080, "What Port To Output Frames To (Default is 8080)")
+var port = flag.Int("port", 8080, "What Port To Output Frames To")
 var version = flag.Bool("version", false, "Flag To Show Current Version")
 var sudo = flag.Bool("sudo", false, "Force Program To Run As Sudo")
 
