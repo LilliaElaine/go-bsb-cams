@@ -12,7 +12,7 @@ on:
 permissions:
   contents: write
 jobs:
-  build:
+  build-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +25,15 @@ jobs:
       - name: install libusb
         run: sudo apt update && sudo apt install -y libusb-1.0-0-dev
 
-      - name: Build
-        run: go build -v ./...
+      - name: Build Release
+        run: go build -v -ldflags "-X main.gitVersion=${{ github.ref_name }}" ./...
+        if: github.ref_type == 'tag'
 
-      - name: Release
+      - name: Build Non-Release
+        run: go build ./...
+        if: github.ref_type != 'tag'
+
+      - name: Release Binary
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
