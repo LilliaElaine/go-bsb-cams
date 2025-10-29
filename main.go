@@ -20,10 +20,10 @@ import (
 )
 
 const udevrule = `# Bigscreen Bigeye
-KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="35bd", ATTRS{idProduct}=="0202", MODE="0660", TAG+="uaccess"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="35bd", ATTRS{idProduct}=="0202", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="35bd", ATTRS{idProduct}=="0202", MODE="0660", GROUP="users", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="35bd", ATTRS{idProduct}=="0202", MODE="0660", GROUP="users", TAG+="uaccess"
 `
-const path = "99-bsb-cams.rules"
+const udevfilename = "99-bsb-cams.rules"
 
 func getdevice() (device string) {
 	ctx := gousb.NewContext()
@@ -32,40 +32,42 @@ func getdevice() (device string) {
 	user, _ := user.Current()
 	if user.Username == "root" && !*sudo {
 		log.Print("Running As Root Isnt Reccomended For Safety, Creating A UDEV Rule To Allow Rootless Access ")
-		if _, err := os.Stat(path); err == nil {
+		if _, err := os.Stat(udevfilename); err == nil {
 			log.Print("File Already Exists")
 		} else {
-			err := os.WriteFile(path, []byte(udevrule), 0644)
+			err := os.WriteFile(udevfilename, []byte(udevrule), 0644)
 			if err != nil {
 				log.Fatalf("Could not Create File: %v", err)
 			}
 		}
 		var response string
-		log.Printf("Would You Like The UDEV Rule Automatically Moved To Your UDEV DIR? It will be at /usr/lib/udev/rules.d/%v (Y/N)", path)
+		log.Print("Would You Like The UDEV Rule Automatically Moved And Put In Place? (Y/N)")
 		fmt.Scan(&response)
 		switch strings.ToLower(response) {
 		case "yes", "ye", "y":
-			log.Print("Moving File !!")
-			if _, err := os.Stat(path); err == nil {
-				log.Print("File Already Exists, Do You Want To Replace It? (Y/N)")
-				fmt.Scan(&response)
-				switch strings.ToLower(response) {
-				case "yes", "ye", "y":
-					log.Print("Replacing File !")
-				case "n", "no":
-					os.Exit(0)
-				default:
-					log.Fatal("Invalid Response")
+			log.Printf("Would You Like The Rule Moved To The Userspace (/usr/lib/udev/rules.d/%v) Or The Linux OS Space (/etc/udev/rules.d/%v) (Good For Atomic Operating Systems) ", udevfilename)
+			log.Print("0/Userspace    1/OS Space")
+			fmt.Scan(&response)
+			switch strings.ToLower(response) {
+			case "0", "userspace":
+				log.Printf("Putting File In /usr/lib/udev/rules.d/%v !!", udevfilename)
+				err := os.Rename(udevfilename, "/usr/lib/udev/rules.d/"+udevfilename)
+				if err != nil {
+					log.Fatalf("Could Not Move File: %v", err)
 				}
-			}
-			err := os.Rename(path, "/usr/lib/udev/rules.d/"+path)
-			if err != nil {
-				log.Fatalf("Could Not Move File: %v", err)
+			case "1", "os space":
+				log.Printf("Putting File In /etc/udev/rules.d/%v !!", udevfilename)
+				err := os.Rename(udevfilename, "/etc/udev/rules.d/"+udevfilename)
+				if err != nil {
+					log.Fatalf("Could Not Move File: %v", err)
+				}
+			default:
+				log.Fatal("Invalid Response")
 			}
 			log.Print("Please Reboot Your PC For Changes To Take Effect!!")
 			os.Exit(0)
 		case "n", "no":
-			log.Printf("Please move the file (%v) into your udev rule directory and reboot for it to take effect, or if you REALLLLY want to run this program as sudo append --sudo to your run command", path)
+			log.Printf("Please move the file (%v) into your udev rule directory and reboot for it to take effect, or if you REALLLLY want to run this program as sudo append --sudo to your run command", udevfilename)
 			os.Exit(0)
 		default:
 			log.Fatal("Invalid Answer")
@@ -74,19 +76,20 @@ func getdevice() (device string) {
 	if err != nil {
 		if err == gousb.ErrorAccess {
 			log.Print("It looks like the cameras cannot be accessed, udev file being created in this directory")
-			log.Printf("Creating UDEV Rule At %v", path)
-			if _, err := os.Stat(path); err == nil {
-				log.Print("File Already Exists")
-			} else {
-				err := os.WriteFile(path, []byte(udevrule), 0644)
-				if err != nil {
-					log.Fatalf("Could not Create File: %v", err)
-				}
+			log.Printf("Creating UDEV Rule At %v", udevfilename)
+			err := os.WriteFile(udevfilename, []byte(udevrule), 0644)
+			if err != nil {
+				log.Fatalf("Could not Create File: %v", err)
 			}
 			log.Print("File Created ! Please copy to your udev directory, chown to root, and reboot for it to take effect")
 			os.Exit(0)
 
+		} else {
+			log.Fatal(err)
 		}
+	}
+	if dev == nil {
+		log.Fatal("Could Not Find Device, Please Make Sure It Is On And Plugged In !")
 	}
 	defer dev.Close()
 	return fmt.Sprintf("/dev/bus/usb/%03v/%03v", dev.Desc.Bus, dev.Desc.Address)
@@ -112,6 +115,7 @@ func main() {
 	mux.Handle("/stream", stream)
 	log.Print("Server Is Running And Can Be Accessed At: http://localhost:" + strconv.Itoa(*port) + "/stream")
 	log.Print("Make Sure You Have No Ending / When Inputting The Url Into Baballonia !!!")
+	log.Print("If You Are Here And Cannot See The Cams, Please Close This Program, Unplug And Replug Your BSB, And Try Again :)")
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), mux))
 
 }
