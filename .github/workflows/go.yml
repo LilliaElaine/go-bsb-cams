@@ -26,7 +26,7 @@ jobs:
         run: sudo apt update && sudo apt install -y libusb-1.0-0-dev
 
       - name: Build Release
-        run: go build -v -o go-bsb-cams-v${{ github.ref_name }} -ldflags "-X main.gitVersion=${{ github.ref_name }}" ./...
+        run: go build -v -o go-bsb-cams-${{ github.ref_name }} -ldflags "-X main.gitVersion=${{ github.ref_name }}" ./...
         if: github.ref_type == 'tag'
 
       - name: Build Non-Release
