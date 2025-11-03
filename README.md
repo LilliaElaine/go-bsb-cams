@@ -1,4 +1,6 @@
-# go-bsb-cams
+# go-bsb-cams-fast
+Fork of [go-bsb-cams](https://github.com/LilliaElaine/go-bsb-cams) that removes the re-encoding of the JPEG image allowing for much faster performance. This re-encoding presumably reduces/removes tearing, to fix this, a mutual exclusion lock is used to prevent unwanted updates to the frame. This came about after using the script and noticing SIGNIFICANT delay.
+
 Simple program to take and output the Bigscreen Beyond 2e cameras to a webserver to be used with eyetracking software.
 
 ## Usage

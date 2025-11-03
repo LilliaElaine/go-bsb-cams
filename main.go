@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"image/jpeg"
 	"log"
 	"net/http"
 	"os"
 	"os/user"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/google/gousb"
@@ -24,6 +24,33 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="35bd", ATTRS{idProduct
 SUBSYSTEM=="usb", ATTRS{idVendor}=="35bd", ATTRS{idProduct}=="0202", MODE="0660", GROUP="users", TAG+="uaccess"
 `
 const udevfilename = "99-bsb-cams.rules"
+
+type FrameBuffer struct {
+	mu    sync.Mutex
+	frame []byte
+}
+
+func (fb *FrameBuffer) Update(data []byte) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	// Create a copy to store internally
+	if fb.frame == nil || len(fb.frame) != len(data) {
+		fb.frame = make([]byte, len(data))
+	}
+	copy(fb.frame, data)
+}
+
+func (fb *FrameBuffer) Get() []byte {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if fb.frame == nil {
+		return nil
+	}
+	// Return a copy to prevent tearing
+	frameCopy := make([]byte, len(fb.frame))
+	copy(frameCopy, fb.frame)
+	return frameCopy
+}
 
 func getdevice() (device string) {
 	ctx := gousb.NewContext()
@@ -109,18 +136,32 @@ func main() {
 	}
 	stream := mjpeg.NewLiveStream()
 	device := getdevice()
-	// Pass your jpegBuffer frames using stream.UpdateJPEG(<your-buffer>)
-	go imagestreamer(stream, device)
+
+	// Use frame buffer to prevent tearing
+	frameBuf := &FrameBuffer{}
+
+	// Start frame reader goroutine
+	go imagestreamer(frameBuf, device)
+
+	// Start frame delivery goroutine that continuously pushes latest frame to stream
+	go func() {
+		for {
+			frame := frameBuf.Get()
+			if frame != nil {
+				stream.UpdateJPEG(frame)
+			}
+		}
+	}()
+
 	mux := http.NewServeMux()
 	mux.Handle("/stream", stream)
 	log.Print("Server Is Running And Can Be Accessed At: http://localhost:" + strconv.Itoa(*port) + "/stream")
 	log.Print("Make Sure You Have No Ending / When Inputting The Url Into Baballonia !!!")
 	log.Print("If You Are Here And Cannot See The Cams, Please Close This Program, Unplug And Replug Your BSB, And Try Again :)")
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), mux))
-
 }
 
-func imagestreamer(stream *mjpeg.Stream, device string) {
+func imagestreamer(frameBuf *FrameBuffer, device string) {
 frame:
 	fd, err := syscall.Open(device, syscall.O_RDWR, 0)
 	var deviceFd = fd
@@ -161,18 +202,18 @@ frame:
 					goto frame
 				}
 
-				img, err := jpeg.Decode(fr)
-				if err != nil {
+				// Read frame data into buffer
+				jpegbuf := new(bytes.Buffer)
+				if _, err := jpegbuf.ReadFrom(fr); err != nil {
+					if *verbosePtr {
+						log.Printf("failed to read frame: %v", err)
+					}
 					continue
 				}
-				jpegbuf := new(bytes.Buffer)
 
-				if err = jpeg.Encode(jpegbuf, img, nil); err != nil {
-					log.Printf("failed to encode: %v", err)
-				}
-				// boundry := ("--frame-boundary\r\nContent-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(jpegbuf.Bytes())) + "\r\n\r\n")
-				// stream.UpdateJPEG(append([]byte(boundry), jpegbuf.Bytes()...))
-				stream.UpdateJPEG(jpegbuf.Bytes())
+				// Atomically update the current frame - only complete frames are visible
+				// This prevents tearing by ensuring frames are never partially written
+				frameBuf.Update(jpegbuf.Bytes())
 			}
 		}
 	}
