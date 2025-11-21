@@ -11,12 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
-	"github.com/google/gousb"
 	"github.com/hybridgroup/mjpeg"
-	"github.com/kevmo314/go-uvc"
-	"github.com/kevmo314/go-uvc/pkg/descriptors"
+	gouvc "github.com/visago/go-uvc"
 )
 
 const udevrule = `# Bigscreen Bigeye
@@ -52,10 +49,51 @@ func (fb *FrameBuffer) Get() []byte {
 	return frameCopy
 }
 
-func getdevice() (device string) {
-	ctx := gousb.NewContext()
-	defer ctx.Close()
-	dev, err := ctx.OpenDeviceWithVIDPID(0x35bd, 0x0202)
+var gitVersion string
+var verbosePtr = flag.Bool("verbose", false, "Whether or not to show libusb errors")
+var port = flag.Int("port", 8080, "What Port To Output Frames To")
+var version = flag.Bool("version", false, "Flag To Show Current Version")
+var sudo = flag.Bool("sudo", false, "Force Program To Run As Sudo")
+
+func main() {
+	flag.Parse()
+	if *version {
+		log.Print("go-bsb-cams " + gitVersion)
+		os.Exit(0)
+	}
+	stream := mjpeg.NewLiveStream()
+
+	// Use frame buffer to prevent tearing
+	frameBuf := &FrameBuffer{}
+
+	// Start frame reader goroutine
+	go imagestreamer(frameBuf)
+
+	// Start frame delivery goroutine that continuously pushes latest frame to stream
+	go func() {
+		for {
+			frame := frameBuf.Get()
+			if frame != nil {
+				stream.UpdateJPEG(frame)
+			}
+		}
+	}()
+
+	mux := http.NewServeMux()
+	mux.Handle("/stream", stream)
+	log.Print("Server Is Running And Can Be Accessed At: http://localhost:" + strconv.Itoa(*port) + "/stream")
+	log.Print("Make Sure You Have No Ending / When Inputting The Url Into Baballonia !!!")
+	log.Print("If You Are Here And Cannot See The Cams, Please Close This Program, Unplug And Replug Your BSB, And Try Again :)")
+	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), mux))
+}
+
+func imagestreamer(frameBuf *FrameBuffer) {
+	uvc := &gouvc.UVC{}
+	if err := uvc.Init(); err != nil {
+		log.Fatal("init: ", err)
+	}
+	defer uvc.Exit()
+
 	user, _ := user.Current()
 	if user.Username == "root" && !*sudo {
 		log.Print("Running As Root Isnt Reccomended For Safety, Creating A UDEV Rule To Allow Rootless Access ")
@@ -100,121 +138,83 @@ func getdevice() (device string) {
 			log.Fatal("Invalid Answer")
 		}
 	}
+
+	frame:
+	device, err := uvc.FindDevice(0x35bd, 0x0202, "")
 	if err != nil {
-		if err == gousb.ErrorAccess {
-			log.Print("It looks like the cameras cannot be accessed, udev file being created in this directory")
-			log.Printf("Creating UDEV Rule At %v", udevfilename)
-			err := os.WriteFile(udevfilename, []byte(udevrule), 0644)
-			if err != nil {
-				log.Fatalf("Could not Create File: %v", err)
-			}
-			log.Print("File Created ! Please copy to your udev directory, chown to root, and reboot for it to take effect")
-			os.Exit(0)
+		log.Print("Could Not Find Device, Please Make Sure It Is On And Plugged In !")
+		log.Fatal("Error finding device: ", err)
+	}
+	defer device.Unref()
+	// desc, _ := device.Descriptor()
+	// log.Println("Found BSB2e cameras:\n", desc)
+	log.Println("Found BSB2e cameras")
 
-		} else {
-			log.Fatal(err)
+	if err := device.Open(); err != nil {
+		log.Println("Error opening cameras: ",err)
+		log.Print("It looks like the cameras cannot be accessed, udev file being created in this directory")
+		log.Printf("Creating UDEV Rule At %v", udevfilename)
+		err := os.WriteFile(udevfilename, []byte(udevrule), 0644)
+		if err != nil {
+			log.Fatalf("Could not Create File: %v", err)
 		}
-	}
-	if dev == nil {
-		log.Fatal("Could Not Find Device, Please Make Sure It Is On And Plugged In !")
-	}
-	defer dev.Close()
-	return fmt.Sprintf("/dev/bus/usb/%03v/%03v", dev.Desc.Bus, dev.Desc.Address)
-}
-
-var gitVersion string
-var verbosePtr = flag.Bool("verbose", false, "Whether or not to show libusb errors")
-var port = flag.Int("port", 8080, "What Port To Output Frames To")
-var version = flag.Bool("version", false, "Flag To Show Current Version")
-var sudo = flag.Bool("sudo", false, "Force Program To Run As Sudo")
-
-func main() {
-	flag.Parse()
-	if *version {
-		log.Print("go-bsb-cams " + gitVersion)
+		log.Print("File Created ! Please copy to your udev directory, chown to root, and reboot for it to take effect")
 		os.Exit(0)
 	}
-	stream := mjpeg.NewLiveStream()
-	device := getdevice()
+	defer device.Close()
 
-	// Use frame buffer to prevent tearing
-	frameBuf := &FrameBuffer{}
 
-	// Start frame reader goroutine
-	go imagestreamer(frameBuf, device)
+	format := gouvc.FRAME_FORMAT_MJPEG
+	width := 800
+	height := 400
+	fps := 90
 
-	// Start frame delivery goroutine that continuously pushes latest frame to stream
-	go func() {
-		for {
-			frame := frameBuf.Get()
-			if frame != nil {
-				stream.UpdateJPEG(frame)
+	for _, si := range device.StreamInterfaces() {
+		for _, formatDesc := range si.FormatDescriptors() {
+			for _, frameDesc := range formatDesc.FrameDescriptors() {
+				switch formatDesc.Subtype {
+				case gouvc.VS_FORMAT_MJPEG:
+					format = gouvc.FRAME_FORMAT_MJPEG
+				case gouvc.VS_FORMAT_FRAME_BASED:
+					// format = gouvc.FRAME_FORMAT_H264
+				default:
+					format = gouvc.FRAME_FORMAT_YUYV
+				}
+				width = int(frameDesc.Width)
+				height = int(frameDesc.Height)
+				fps = int(10000000 / frameDesc.DefaultFrameInterval)
+				break
 			}
 		}
-	}()
-
-	mux := http.NewServeMux()
-	mux.Handle("/stream", stream)
-	log.Print("Server Is Running And Can Be Accessed At: http://localhost:" + strconv.Itoa(*port) + "/stream")
-	log.Print("Make Sure You Have No Ending / When Inputting The Url Into Baballonia !!!")
-	log.Print("If You Are Here And Cannot See The Cams, Please Close This Program, Unplug And Replug Your BSB, And Try Again :)")
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), mux))
-}
-
-func imagestreamer(frameBuf *FrameBuffer, device string) {
-frame:
-	fd, err := syscall.Open(device, syscall.O_RDWR, 0)
-	var deviceFd = fd
-	if err != nil {
-		panic(err)
-	}
-	ctx, err := uvc.NewUVCDevice(uintptr(fd))
-	if err != nil {
-		panic(err)
 	}
 
-	info, err := ctx.DeviceInfo()
+	stream, err := device.GetStream(format, width, height, fps)
 	if err != nil {
-		panic(err)
+		log.Fatal("Error getting stream: ", err)
 	}
-	for _, iface := range info.StreamingInterfaces {
+	if err := stream.Open(); err != nil {
+		log.Fatal("Error opening stream: ", err)
+	}
+	defer stream.Close()
 
-		for i, desc := range iface.Descriptors {
-			fd, ok := desc.(*descriptors.MJPEGFormatDescriptor)
-			if !ok {
-				continue
-			}
-			frd := iface.Descriptors[i+1].(*descriptors.MJPEGFrameDescriptor)
+	cf, err := stream.Start()
+	if err != nil {
+		log.Fatal("Error starting stream: ", err)
+	}
+	defer stream.Stop()
 
-			resp, err := iface.ClaimFrameReader(fd.Index(), frd.Index())
-			if err != nil {
-				log.Print("Yes")
-				panic(err)
-			}
-			for {
-				fr, err := resp.ReadFrame()
-				if err != nil {
-					if *verbosePtr {
-						log.Print(err)
-						log.Print("Reclaiming Frame Reader and continuing to get frames... ")
-					}
-					syscall.Close(deviceFd)
-					goto frame
+	for {
+		select {
+		case frame := <-cf:
+			jpegbuf := new(bytes.Buffer)
+			if _, err := jpegbuf.ReadFrom(frame); err != nil {
+				if *verbosePtr {
+					log.Printf("Failed to read frame: %v", err)
+					log.Print("Retying device and continuing to get frames... ")
 				}
-
-				// Read frame data into buffer
-				jpegbuf := new(bytes.Buffer)
-				if _, err := jpegbuf.ReadFrom(fr); err != nil {
-					if *verbosePtr {
-						log.Printf("failed to read frame: %v", err)
-					}
-					continue
-				}
-
-				// Atomically update the current frame - only complete frames are visible
-				// This prevents tearing by ensuring frames are never partially written
-				frameBuf.Update(jpegbuf.Bytes())
+				goto frame
 			}
+			frameBuf.Update(jpegbuf.Bytes())
 		}
 	}
 }
