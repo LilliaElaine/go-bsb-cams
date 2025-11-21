@@ -10,7 +10,6 @@ import (
 	"os/user"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/hybridgroup/mjpeg"
 	gouvc "github.com/visago/go-uvc"
@@ -21,33 +20,6 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="35bd", ATTRS{idProduct
 SUBSYSTEM=="usb", ATTRS{idVendor}=="35bd", ATTRS{idProduct}=="0202", MODE="0660", GROUP="users", TAG+="uaccess"
 `
 const udevfilename = "99-bsb-cams.rules"
-
-type FrameBuffer struct {
-	mu    sync.Mutex
-	frame []byte
-}
-
-func (fb *FrameBuffer) Update(data []byte) {
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
-	// Create a copy to store internally
-	if fb.frame == nil || len(fb.frame) != len(data) {
-		fb.frame = make([]byte, len(data))
-	}
-	copy(fb.frame, data)
-}
-
-func (fb *FrameBuffer) Get() []byte {
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
-	if fb.frame == nil {
-		return nil
-	}
-	// Return a copy to prevent tearing
-	frameCopy := make([]byte, len(fb.frame))
-	copy(frameCopy, fb.frame)
-	return frameCopy
-}
 
 var gitVersion string
 var verbosePtr = flag.Bool("verbose", false, "Whether or not to show libusb errors")
@@ -61,33 +33,24 @@ func main() {
 		log.Print("go-bsb-cams " + gitVersion)
 		os.Exit(0)
 	}
-	stream := mjpeg.NewLiveStream()
+	streamer := mjpeg.NewLiveStream()
 
 	// Use frame buffer to prevent tearing
-	frameBuf := &FrameBuffer{}
 
 	// Start frame reader goroutine
-	go imagestreamer(frameBuf)
+	go imagestreamer(streamer)
 
 	// Start frame delivery goroutine that continuously pushes latest frame to stream
-	go func() {
-		for {
-			frame := frameBuf.Get()
-			if frame != nil {
-				stream.UpdateJPEG(frame)
-			}
-		}
-	}()
 
 	mux := http.NewServeMux()
-	mux.Handle("/stream", stream)
+	mux.Handle("/stream", streamer)
 	log.Print("Server Is Running And Can Be Accessed At: http://localhost:" + strconv.Itoa(*port) + "/stream")
 	log.Print("Make Sure You Have No Ending / When Inputting The Url Into Baballonia !!!")
 	log.Print("If You Are Here And Cannot See The Cams, Please Close This Program, Unplug And Replug Your BSB, And Try Again :)")
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), mux))
 }
 
-func imagestreamer(frameBuf *FrameBuffer) {
+func imagestreamer(streamer *mjpeg.Stream) {
 	uvc := &gouvc.UVC{}
 	if err := uvc.Init(); err != nil {
 		log.Fatal("init: ", err)
@@ -214,7 +177,7 @@ func imagestreamer(frameBuf *FrameBuffer) {
 				}
 				goto frame
 			}
-			frameBuf.Update(jpegbuf.Bytes())
+			streamer.UpdateJPEG(jpegbuf.Bytes())
 		}
 	}
 }
