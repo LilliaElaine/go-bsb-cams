@@ -10,6 +10,6 @@ To run or build the src with golang:
 
 Clone This repo and get the dependencies with: `go get .`
 
-Execute the following command within the root directory: `go run main.go` to run as a go program 
+Execute the following command within the root directory: `go run main.go` to run as a go program
 
 Alternatively, the program can be built with `go build` and run via the resulting executable.
